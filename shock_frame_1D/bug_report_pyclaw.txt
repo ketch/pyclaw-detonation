@@ -1,0 +1,7 @@
+1- On https://pyclaw.readthedocs.org/en/latest/problem.html
+add a note saying that the Riemann solver must be added 
+to the dictionary in static.py
+
+2- Document compute_gauge_values_function
+
+3- Fix documentation errors with "computing functionals"

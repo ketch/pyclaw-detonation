@@ -1,0 +1,5 @@
+In order to compile the fortran code into pyclaw, do as folllow
+
+f2py -m reactive_euler -c rp1_reactive_euler_with_efix_luiz.f90 
+
+Then add the name of the compiled file to CLAWPACK/riemann/src/python/riemann/static.py
