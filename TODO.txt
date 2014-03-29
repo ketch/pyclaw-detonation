@@ -1,0 +1,12 @@
+List of things to do:
+
+- Get a working version of shock_frame_1D
+- Write data for lab_frame_2D solver in a format that a software like
+paraview can read
+- Implement entropy fix in the 2D solver
+- Check that the entropy fix in the 1D solver is working fine (need
+some test case for this). Entropy fixes are probably not important
+when studying the stability of the ZND waves, but they might be
+important in other situations
+- Add the other things "to do" in this list
+
