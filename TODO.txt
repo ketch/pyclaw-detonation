@@ -8,5 +8,7 @@ paraview can read
 some test case for this). Entropy fixes are probably not important
 when studying the stability of the ZND waves, but they might be
 important in other situations
+- Add some explanations to riemann solvers, steadyState script, and
+ZND_* scripts
 - Add the other things "to do" in this list
 
