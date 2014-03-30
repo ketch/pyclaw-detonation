@@ -2,9 +2,9 @@
 subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apdq)
 ! =========================================================
 
-!     # solve Riemann problems for the 1D Euler reactive Euler equations using Roe's
-!     # approximate Riemann solver for the Euler system plus a passive
-!     # tracer.
+!     # solve Riemann problems for the 1D Reactive Euler reactive Euler equations using Roe's
+!     # approximate Riemann solver for the multicomponent Euler system
+!     # Note: entropy fix not modified yet!
 
 !     # On input, ql contains the state vector at the left edge of each cell
 !     #           qr contains the state vector at the right edge of each cell
@@ -29,12 +29,12 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apdq)
 !     # local storage
 !     ---------------
     dimension delta(meqn)
-    dimension u(1-mbc:maxmx+mbc),enth(1-mbc:maxmx+mbc)
-    dimension a(1-mbc:maxmx+mbc)
+    dimension u(1-mbc:maxmx+mbc),enth(1-mbc:maxmx+mbc),Y(1-mbc:maxmx+mbc)
+    dimension c(1-mbc:maxmx+mbc)
     logical :: efix
-    common /cparam/  gamma,gamma1,qheat
+    common /cparam/  gamma,gamma1,qheat,fspeed
 
-    data efix /.true./    !# use entropy fix for transonic rarefactions
+    data efix /.false./    !# use entropy fix for transonic rarefactions
 
 !     # Compute Roe-averaged quantities:
 
@@ -42,50 +42,58 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apdq)
         rhsqrtl = dsqrt(qr(1,i-1))
         rhsqrtr = dsqrt(ql(1,i))
         pl = gamma1*(qr(3,i-1) &
-        - 0.5d0*(qr(2,i-1)**2)/qr(1,i-1)+qr(4,i-1)*qheat)
+        - 0.5d0*(qr(2,i-1)**2)/qr(1,i-1)-qr(4,i-1)*qheat)
         pr = gamma1*(ql(3,i) &
-        - 0.5d0*(ql(2,i)**2)/ql(1,i)+qr(4,i)*qheat)
+        - 0.5d0*(ql(2,i)**2)/ql(1,i)-qr(4,i)*qheat)
         rhsq2 = rhsqrtl + rhsqrtr
         u(i) = (qr(2,i-1)/rhsqrtl + ql(2,i)/rhsqrtr) / rhsq2
         enth(i) = (((qr(3,i-1)+pl)/rhsqrtl &
         + (ql(3,i)+pr)/rhsqrtr)) / rhsq2
-        a2 = gamma1*(enth(i) - .5d0*u(i)**2)
-        a(i) = dsqrt(a2)
+        Y(i) = (qr(4,i-1)/rhsqrtl + ql(4,i)/rhsqrtr) / rhsq2
+        c2 = gamma1*(enth(i) - .5d0*u(i)**2 - qheat*Y(i))
+        c(i) = dsqrt(c2)
     20 END DO
 
 
     do 30 i=2-mbc,mx+mbc
     
-    !        # find a1 thru a3, the coefficients of the 3 eigenvectors:
+    !        # find a1 thru a4, the coefficients of the 4 eigenvectors:
     
         delta(1) = ql(1,i) - qr(1,i-1)
         delta(2) = ql(2,i) - qr(2,i-1)
         delta(3) = ql(3,i) - qr(3,i-1)
         delta(4) = ql(4,i) - qr(4,i-1)
-        a2 = gamma1/a(i)**2 * ((enth(i)-u(i)**2)*delta(1) &
-        + u(i)*delta(2) - delta(3))
-        a3 = (delta(2) + (a(i)-u(i))*delta(1) - a(i)*a2) / (2.d0*a(i))
-        a1 = delta(1) - a2 - a3
-    
-    !        # Compute the waves.
+        a2 = gamma1/c(i)**2 * ((enth(i)-u(i)**2-qheat*Y(i))*delta(1) &
+        + u(i)*delta(2) - delta(3) + qheat*delta(4))
+        a4 = ( (c(i)-u(i))*delta(1) + delta(2) - c(i)*a2 ) / (2.d0*c(i))
+        a1 = delta(1) - a2 - a4
+        a3 = -Y(i)*delta(1) + delta(4) + Y(i)*a2
+
+    !        # Compute the waves. These are simply the weights a1, a2, a3, a4 times eigvec
     
         wave(1,1,i) = a1
-        wave(2,1,i) = a1*(u(i)-a(i))
-        wave(3,1,i) = a1*(enth(i) - u(i)*a(i))
-        wave(4,1,i) = 0.d0
-        s(1,i) = u(i)-a(i)
+        wave(2,1,i) = a1*(u(i)-c(i))
+        wave(3,1,i) = a1*(enth(i) - u(i)*c(i))
+        wave(4,1,i) = a1*(Y(i))
+        s(1,i) = u(i)-c(i)-fspeed
     
         wave(1,2,i) = a2
         wave(2,2,i) = a2*u(i)
         wave(3,2,i) = a2*0.5d0*u(i)**2
-        wave(4,2,i) = delta(4)
-        s(2,i) = u(i)
+        wave(4,2,i) = 0.d0
+        s(2,i) = u(i)-fspeed
+
+        wave(1,3,i) = 0.d0
+        wave(2,3,i) = 0.d0
+        wave(3,3,i) = a3*qheat
+        wave(4,3,i) = a3
+        s(3,i) = u(i)-fspeed
     
-        wave(1,3,i) = a3
-        wave(2,3,i) = a3*(u(i)+a(i))
-        wave(3,3,i) = a3*(enth(i)+u(i)*a(i))
-        wave(4,3,i) = 0.d0
-        s(3,i) = u(i)+a(i)
+        wave(1,4,i) = a4
+        wave(2,4,i) = a4*(u(i)+c(i))
+        wave(3,4,i) = a4*(enth(i)+u(i)*c(i))
+        wave(4,4,i) = a4*Y(i)
+        s(4,i) = u(i)+c(i)-fspeed
     30 END DO
 
 !     # compute Godunov flux f0:
@@ -100,7 +108,7 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apdq)
 !     # amdq = SUM s*wave   over left-going waves
 !     # apdq = SUM s*wave   over right-going waves
 
-    do 100 m=1,3
+    do 100 m=1,4
         do 100 i=2-mbc, mx+mbc
             amdq(m,i) = 0.d0
             apdq(m,i) = 0.d0
@@ -132,15 +140,15 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apdq)
     !        ---------------
     
         rhoim1 = qr(1,i-1)
-        pim1 = gamma1*(qr(3,i-1) - 0.5d0*qr(2,i-1)**2 / rhoim1 + &
+        pim1 = gamma1*(qr(3,i-1) - 0.5d0*qr(2,i-1)**2 / rhoim1 - &
         qr(4,i-1)*qheat)
         cim1 = dsqrt(gamma*pim1/rhoim1)
-        s0 = qr(2,i-1)/rhoim1 - cim1     !# u-c in left state (cell i-1)
+        s0 = qr(2,i-1)/rhoim1 - cim1 - fspeed    !# u-c in left state (cell i-1)
 
     !        # check for fully supersonic case:
         if (s0 >= 0.d0 .AND. s(1,i) > 0.d0)  then
-        !            # everything is right-going
-            do 60 m=1,3
+        !            # everything is right-going, so no left waves
+            do 60 m=1,4
                 amdq(m,i) = 0.d0
             60 END DO
             go to 200
@@ -148,11 +156,12 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apdq)
     
         rho1 = qr(1,i-1) + wave(1,1,i)
         rhou1 = qr(2,i-1) + wave(2,1,i)
-        en1 = qr(3,i-1) + wave(3,1,i)
-        qlam1 = qr(4,i-1) + wave(4,1,i)
-        p1 = gamma1*(en1 - 0.5d0*rhou1**2/rho1 + qlam1)
+        rhoY = qr(3,i-1) + wave(3,1,i)
+        rhoen1 = qr(4,i-1) + wave(4,1,i)
+
+        p1 = gamma1*(rhoen1 - 0.5d0*rhou1**2/rho1 - rhoY*qheat)
         c1 = dsqrt(gamma*p1/rho1)
-        s1 = rhou1/rho1 - c1  !# u-c to right of 1-wave
+        s1 = rhou1/rho1 - c1 - fspeed !# u-c to right of 1-wave
         if (s0 < 0.d0 .AND. s1 > 0.d0) then
         !            # transonic rarefaction in the 1-wave
             sfract = s0 * (s1-s(1,i)) / (s1-s0)
@@ -163,46 +172,55 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apdq)
         !            # 1-wave is rightgoing
             sfract = 0.d0   !# this shouldn't happen since s0 < 0
         endif
-        do 120 m=1,3
+        do 120 m=1,4
             amdq(m,i) = sfract*wave(m,1,i)
         120 END DO
     
-    !        # check 2-wave:
+    !        # check 2-wave:wave corresponds u characteristic for entropy
     !        ---------------
     
         if (s(2,i) >= 0.d0) go to 200  !# 2-wave is rightgoing
-        do 140 m=1,3
+        do 130 m=1,4
             amdq(m,i) = amdq(m,i) + s(2,i)*wave(m,2,i)
-        140 END DO
+        130 END DO
     
-    !        # check 3-wave:
+    !        # check 3-wave: corresponds to u characteristic for Y
+    !        ---------------
+    
+        if (s(3,i) >= 0.d0) go to 200  !# 3-wave is rightgoing
+        do 140 m=1,4
+            amdq(m,i) = amdq(m,i) + s(3,i)*wave(m,3,i)
+        140 END DO
+
+    !        # check 4-wave: corresponds to u+c
     !        ---------------
     
         rhoi = ql(1,i)
-        pi = gamma1*(ql(3,i) - 0.5d0*ql(2,i)**2 / rhoi + ql(4,i)*qheat)
+        pi = gamma1*(ql(3,i) - 0.5d0*ql(2,i)**2 / rhoi - ql(4,i)*qheat)
         ci = dsqrt(gamma*pi/rhoi)
-        s3 = ql(2,i)/rhoi + ci     !# u+c in right state  (cell i)
+        s3 = ql(2,i)/rhoi + ci - fspeed     !# u+c in right state  (cell i)
     
-        rho2 = ql(1,i) - wave(1,3,i)
-        rhou2 = ql(2,i) - wave(2,3,i)
-        en2 = ql(3,i) - wave(3,3,i)
-        qlam2 = ql(4,i) - wave(4,3,i)
-        p2 = gamma1*(en2 - 0.5d0*rhou2**2/rho2 + qlam2)
+        rho2 = ql(1,i) - wave(1,4,i)
+        rhou2 = ql(2,i) - wave(2,4,i)
+        rhoY2 = ql(3,i) - wave(3,4,i)
+        rhoen2 = ql(4,i) - wave(4,4,i)
+
+        p2 = gamma1*(en2 - 0.5d0*rhou2**2/rho2 + rhoY2*qheat)
         c2 = dsqrt(gamma*p2/rho2)
-        s2 = rhou2/rho2 + c2   !# u+c to left of 3-wave
+        s2 = rhou2/rho2 + c2 - fspeed   !# u+c to left of 4-wave
         if (s2 < 0.d0 .AND. s3 > 0.d0) then
-        !            # transonic rarefaction in the 3-wave
-            sfract = s2 * (s3-s(3,i)) / (s3-s2)
-        else if (s(3,i) < 0.d0) then
+        !            # transonic rarefaction in the 4-wave
+            sfract = s2 * (s3-s(4,i)) / (s3-s2)
+        else if (s(4,i) < 0.d0) then
         !            # 3-wave is leftgoing
-            sfract = s(3,i)
+            sfract = s(4,i)
         else
         !            # 3-wave is rightgoing
             go to 200
         endif
     
-        do 160 m=1,3
-            amdq(m,i) = amdq(m,i) + sfract*wave(m,3,i)
+        do 160 m=1,4
+            amdq(m,i) = amdq(m,i) + sfract*wave(m,4,i)
         160 END DO
     200 END DO
 
@@ -217,8 +235,6 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apdq)
             210 END DO
             apdq(m,i) = df - amdq(m,i)
     220 END DO
-
-
 
     900 continue
     return
