@@ -10,5 +10,6 @@ when studying the stability of the ZND waves, but they might be
 important in other situations
 - Add some explanations to riemann solvers, steadyState script, and
 ZND_* scripts
+- Modify the steadyState script to take as input omega
 - Add the other things "to do" in this list
 
