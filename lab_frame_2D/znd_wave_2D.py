@@ -14,7 +14,7 @@ ymax = 10.
 xs = 30.
 
 def b4step(solver, state):
-#    print(vmax)
+    pass
 
 def qinit(state,xs=xs):
     import steadyState as steadyState
@@ -119,7 +119,7 @@ def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
     claw = pyclaw.Controller()
     claw.solution = pyclaw.Solution(state,domain)
     claw.solver = solver
-#    claw.output_format = 'netcdf'
+    claw.output_format = 'netcdf'
 
     claw.keep_copy = True
 
