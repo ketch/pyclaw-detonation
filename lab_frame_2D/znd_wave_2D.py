@@ -5,13 +5,17 @@ import numpy as np
 
 gamma = 1.2
 gamma1 = gamma - 1.
-qheat = 50. 
-Ea = 20. 
-T_ign = 1.5
+q_asympt = 1.7
+theta = 2.1
+qheat = q_asympt*gamma1*gamma
+Ea = theta/(gamma1**2)
+print('Heat release Q={} and activation energy={}'.format(qheat,Ea))
+
+T_ign = 1.005
 
 xmax = 40.
-ymax = 10.
-xs = 30.
+ymax = 20.
+xs = 25.
 
 def b4step(solver, state):
     pass
@@ -42,7 +46,7 @@ def qinit(state,xs=xs):
     Y = np.append(Yl, Yr)
 
     for i in range(y.size):
-        pert = 0.1 * np.cos(2*np.pi*y[i]/ymax)
+        pert = 0.0001 * np.sin(2*np.pi*y[i]/ymax)
         state.q[0,:,i] = rho + pert
         state.q[1,:,i] = rho * u + pert
         state.q[2,:,i] = 0. + pert
@@ -51,7 +55,7 @@ def qinit(state,xs=xs):
         
     state.problem_data['fspeed']= D
     state.problem_data['k']= k
-
+    
 def step_Euler_reaction(solver,state,dt):
     """
     Source terms for reactive Euler equations.
@@ -75,8 +79,8 @@ def omega(state):
     
 
 def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
-          outdir='_output', disable_output=False, mx=200, my=100, tfinal=500,
-          num_output_times = 500):
+          outdir='_output', disable_output=False, mx=150, my=50, tfinal=1000,
+          num_output_times = 100):
     """
     Solve the reactive Euler equations of compressible fluid dynamics.
     """
@@ -104,7 +108,7 @@ def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
     state.problem_data['gamma1']= gamma1
     state.problem_data['qheat']= qheat
 
-    # The k and fspeed problem data is set inside qinit
+    # The k and fspeed problem data are set inside qinit
     qinit(state)
 
     solver.cfl_max = 0.5
@@ -113,13 +117,13 @@ def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
     solver.source_split = 1
     solver.bc_lower[0]=pyclaw.BC.extrap
     solver.bc_upper[0]=pyclaw.BC.extrap
-    solver.bc_lower[1]=pyclaw.BC.periodic
-    solver.bc_upper[1]=pyclaw.BC.periodic
+    solver.bc_lower[1]=pyclaw.BC.wall
+    solver.bc_upper[1]=pyclaw.BC.wall
 
     claw = pyclaw.Controller()
     claw.solution = pyclaw.Solution(state,domain)
     claw.solver = solver
-    claw.output_format = 'netcdf'
+    #claw.output_format = 'netcdf'
 
     claw.keep_copy = True
 
