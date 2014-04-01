@@ -2,19 +2,24 @@
 # encoding: utf-8
 
 import numpy as np
+from setplot import setplot
 
 gamma = 1.2
 gamma1 = gamma - 1.
 q_asympt = 1.7
-theta = 2.1
+theta = 2.
 qheat = q_asympt*gamma1*gamma
 Ea = theta/(gamma1**2)
+
+#qheat = 50
+#Ea = 20
+
 print('Heat release Q={} and activation energy={}'.format(qheat,Ea))
 
 T_ign = 1.005
 
 xmax = 40.
-ymax = 20.
+ymax = 100.
 xs = 25.
 
 def b4step(solver, state):
@@ -46,7 +51,7 @@ def qinit(state,xs=xs):
     Y = np.append(Yl, Yr)
 
     for i in range(y.size):
-        pert = 0.0001 * np.sin(2*np.pi*y[i]/ymax)
+        pert = 0.00001 * np.sin(2*np.pi*y[i]/ymax)
         state.q[0,:,i] = rho + pert
         state.q[1,:,i] = rho * u + pert
         state.q[2,:,i] = 0. + pert
@@ -79,12 +84,13 @@ def omega(state):
     
 
 def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
-          outdir='_output', disable_output=False, mx=150, my=50, tfinal=1000,
-          num_output_times = 100):
+          outdir='_output', disable_output=False, mx=200, my=1000, tfinal=500,
+          num_output_times = 500):
     """
     Solve the reactive Euler equations of compressible fluid dynamics.
     """
     from clawpack import riemann
+
     import reactive_euler_roe_2D
 
     if use_petsc:
@@ -117,8 +123,8 @@ def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
     solver.source_split = 1
     solver.bc_lower[0]=pyclaw.BC.extrap
     solver.bc_upper[0]=pyclaw.BC.extrap
-    solver.bc_lower[1]=pyclaw.BC.wall
-    solver.bc_upper[1]=pyclaw.BC.wall
+    solver.bc_lower[1]=pyclaw.BC.periodic
+    solver.bc_upper[1]=pyclaw.BC.periodic
 
     claw = pyclaw.Controller()
     claw.solution = pyclaw.Solution(state,domain)
@@ -139,69 +145,7 @@ def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
 
     
 #--------------------------
-def setplot(plotdata):
-#--------------------------
-    """ 
-    Specify what is to be plotted at each frame.
-    Input:  plotdata, an instance of visclaw.data.ClawPlotData.
-    Output: a modified version of plotdata.
-    """ 
-    from clawpack.visclaw import colormaps
-
-    plotdata.clearfigures()  # clear any old figures,axes,items data
     
-    # Pressure plot
-    plotfigure = plotdata.new_plotfigure(name='Density', figno=0)
-
-    plotaxes = plotfigure.new_plotaxes()
-    plotaxes.title = 'Density'
-    plotaxes.scaled = False      # so aspect ratio is 1
-    plotaxes.afteraxes = label_axes
-
-    plotitem = plotaxes.new_plotitem(plot_type='2d_schlieren')
-    plotitem.plot_var = 0
-    plotitem.add_colorbar = False
-    
-
-    # Tracer plot
-    plotfigure = plotdata.new_plotfigure(name='Tracer', figno=1)
-
-    plotaxes = plotfigure.new_plotaxes()
-    plotaxes.title = 'Tracer'
-    plotaxes.scaled = False     # so aspect ratio is 1
-    plotaxes.afteraxes = label_axes
-
-    plotitem = plotaxes.new_plotitem(plot_type='2d_pcolor')
-    plotitem.pcolor_cmin = 0.
-    plotitem.pcolor_cmax=1.0
-    plotitem.plot_var = 4
-    plotitem.pcolor_cmap = colormaps.yellow_red_blue
-    plotitem.add_colorbar = False
-    
-
-    # Energy plot
-    plotfigure = plotdata.new_plotfigure(name='Energy', figno=2)
-
-    plotaxes = plotfigure.new_plotaxes()
-    plotaxes.title = 'V'
-    plotaxes.scaled = False      # so aspect ratio is 1
-    plotaxes.afteraxes = label_axes
-
-    plotitem = plotaxes.new_plotitem(plot_type='2d_pcolor')
-#    plotitem.pcolor_cmin = 2.
-#    plotitem.pcolor_cmax=18.0
-    plotitem.plot_var = 2
-    plotitem.pcolor_cmap = colormaps.yellow_red_blue
-    plotitem.add_colorbar = True
-    
-    return plotdata
-
-def label_axes(current_data):
-    import matplotlib.pyplot as plt
-    plt.xlabel('x')
-    plt.ylabel('y')
-    
-
 if __name__=="__main__":
     from clawpack.pyclaw.util import run_app_from_main
     output = run_app_from_main(setup,setplot)
