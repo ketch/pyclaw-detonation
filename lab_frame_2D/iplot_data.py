@@ -1,7 +1,6 @@
 from clawpack import petclaw
-<<<<<<< HEAD
 from setplot import setplot
-=======
-from znd_wave_2D import setplot
->>>>>>> testing
-petclaw.plot.interactive_plot(setplot=setplot)
+
+#ip = petclaw.plot.interactive_plot(setplot=setplot,outdir="_output_weak_heat_release1")
+ip = petclaw.plot.interactive_plot(setplot=setplot,outdir="_output")
+

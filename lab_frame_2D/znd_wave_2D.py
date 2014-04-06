@@ -7,7 +7,7 @@ from setplot import setplot
 gamma = 1.2
 gamma1 = gamma - 1.
 q_asympt = 1.7
-theta = 2.
+theta = 1.8
 qheat = q_asympt*gamma1*gamma
 Ea = theta/(gamma1**2)
 
@@ -18,8 +18,8 @@ print('Heat release Q={} and activation energy={}'.format(qheat,Ea))
 
 T_ign = 1.005
 
-xmax = 40.
-ymax = 100.
+xmax = 30.
+ymax = 40.
 xs = 25.
 
 def b4step(solver, state):
@@ -51,7 +51,7 @@ def qinit(state,xs=xs):
     Y = np.append(Yl, Yr)
 
     for i in range(y.size):
-        pert = 0.00001 * np.sin(2*np.pi*y[i]/ymax)
+        pert = 0.00001 * np.sin(2*np.pi*y[i]/ymax) * (x<xs)
         state.q[0,:,i] = rho + pert
         state.q[1,:,i] = rho * u + pert
         state.q[2,:,i] = 0. + pert
@@ -84,8 +84,8 @@ def omega(state):
     
 
 def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
-          outdir='_output', disable_output=False, mx=200, my=1000, tfinal=500,
-          num_output_times = 500):
+          outdir='_output', disable_output=False, mx=100, my=100, tfinal=5,
+          num_output_times = 5):
     """
     Solve the reactive Euler equations of compressible fluid dynamics.
     """
@@ -123,15 +123,14 @@ def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
     solver.source_split = 1
     solver.bc_lower[0]=pyclaw.BC.extrap
     solver.bc_upper[0]=pyclaw.BC.extrap
-    solver.bc_lower[1]=pyclaw.BC.periodic
-    solver.bc_upper[1]=pyclaw.BC.periodic
+    solver.bc_lower[1]=pyclaw.BC.wall
+    solver.bc_upper[1]=pyclaw.BC.wall
 
     claw = pyclaw.Controller()
     claw.solution = pyclaw.Solution(state,domain)
     claw.solver = solver
-    #claw.output_format = 'netcdf'
-
-    claw.keep_copy = True
+    #claw.output_format = ['hdf5', 'ascii']
+    claw.keep_copy = False
 
     if disable_output:
         claw.output_format = None
@@ -142,11 +141,11 @@ def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
     claw.setplot = setplot
 
     return claw
-
     
 #--------------------------
     
 if __name__=="__main__":
     from clawpack.pyclaw.util import run_app_from_main
     output = run_app_from_main(setup,setplot)
+
 
