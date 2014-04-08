@@ -61,10 +61,7 @@ def qinit(state,domain,xs=xs):
     pg = np.append(pl, pr)
     Yg = np.append(Yl, Yr)
 
-
-
     rho = rhog[ixlower:ixupper]
-
     u = ug[ixlower:ixupper]
     v = vg[ixlower:ixupper]
     p = pg[ixlower:ixupper]
@@ -72,7 +69,7 @@ def qinit(state,domain,xs=xs):
 
     for i in range(y.size):
         #pprint(y.size)
-        pert = 0.01 * np.sin(2*8*np.pi*y[i]/ymax) * (x<xs)
+        pert = 0.0001 * np.sin(2*4*np.pi*y[i]/ymax) * (x<xs)
         #pert=0
         #print(np.shape(rho),np.shape(x))
         state.q[0,:,i] = rho + pert
@@ -106,6 +103,15 @@ def omega(state):
     T = press/rho
     
     return -k*(q[4,:,:])*np.exp(Ea*(1-1/T))*(T>T_ign)
+
+def custom_bc(state,dime,t,qbc,num_ghost):
+    """Right boundary condition
+    """
+    rho_a = 1
+    p_a = 1
+    u_a = 0
+    Y_a = 1
+    
     
 
 def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
@@ -147,7 +153,8 @@ def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
     solver.dt_initial=0.005
     solver.source_split = 1
     solver.bc_lower[0]=pyclaw.BC.extrap
-    solver.bc_upper[0]=pyclaw.BC.extrap
+    solver.bc_upper[0]=pyclaw.BC.custom
+    solver.user_bc_upper= custom_bc
     solver.bc_lower[1]=pyclaw.BC.periodic
     solver.bc_upper[1]=pyclaw.BC.periodic
 
