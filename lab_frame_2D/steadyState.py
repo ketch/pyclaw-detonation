@@ -42,7 +42,7 @@ def steadyState(Q, E, gamma, xgrid):
     def dlamdx(lam, x):
         global Ea, b, k
 
-        delta = b*np.sqrt(1-lam)
+        delta = b*np.sqrt((1-np.minimum(lam,1)))
         rho = (gamma+1)*D**2/(gamma*(1+D**2)*(1-delta))
         p = (1+D**2)*(1+gamma*delta)/(gamma+1)
         U = -gamma*(1+D**2)*(1-delta)/((gamma+1)*D)
@@ -57,7 +57,7 @@ def steadyState(Q, E, gamma, xgrid):
     
 #    lam = lam*(lam < 1) + (lam > 1)
 
-    delta = b*np.sqrt(1-lam)
+    delta = b*np.sqrt(1-np.minimum(lam,1))
     rho = (gamma+1)*D**2/(gamma*(1+D**2)*(1-delta))
     p = (1+D**2)*(1+gamma*delta)/(gamma+1)
     U = -gamma*(1+D**2)*(1-delta)/((gamma+1)*D)
