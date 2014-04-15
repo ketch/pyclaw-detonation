@@ -13,21 +13,21 @@ theta = 1.8
 qheat = q_asympt*gamma1*gamma
 Ea = theta/(gamma1**2)
 
-#qheat = 50
-#Ea = 20
+qheat = 50
+Ea = 20
 
 if mpi.COMM_WORLD.Get_rank()==0:
     print('Heat release Q = {} and activation energy = {}'.format(qheat,Ea)) 
 
-T_ign = 1.005
+T_ign = 2.
 
 xmax = 30.
 ymax = 50.
 mx = 200
-my = 400
+my = 200
 xs = 25.
-tfinal = 1000.
-num_output_times=500
+tfinal = 1.
+num_output_times=10
 
 def b4step(solver, state):
     pass
@@ -76,9 +76,7 @@ def qinit(state,domain,xs=xs):
         state.q[1,:,i] = rho * u +pert
         state.q[2,:,i] = 0. + pert
         state.q[3,:,i] = p/gamma1 + rho*(u**2 + v**2)/2 + qheat * rho * Y  + pert
-        state.q[4,:,i] = rho * Y
-        
-    
+        state.q[4,:,i] = rho * Y        
 
     state.problem_data['fspeed']= D
     state.problem_data['k']= k
@@ -104,15 +102,27 @@ def omega(state):
     
     return -k*(q[4,:,:])*np.exp(Ea*(1-1/T))*(T>T_ign)
 
-def custom_bc(state,dime,t,qbc,num_ghost):
+def custom_bc(state,dim,t,qbc,num_ghost):
     """Right boundary condition
     """
+    for (i,state_dim) in enumerate(state.patch.dimensions):
+        if state_dim.name == dim.name:
+            dim_index = i
+            break
+
+    #y =state.grid.y.centers
     rho_a = 1
     p_a = 1
     u_a = 0
-    Y_a = 1
-    
-    
+    v_a = 0
+    Y_a = 0.8
+
+    for i in xrange(num_ghost):
+        qbc[0,-i-1,:] = rho_a
+        qbc[1,-i-1,:] = rho_a*u_a
+        qbc[2,-i-1,:] = rho_a*v_a
+        qbc[3,-i-1,:] = p_a/gamma1 + rho_a*(u_a**2 + v_a**2)/2 + qheat * rho_a * Y_a
+        qbc[4,-i-1,:] = rho_a * Y_a
 
 def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
           outdir='_output', disable_output=False, mx=mx, my=my, tfinal=tfinal,
