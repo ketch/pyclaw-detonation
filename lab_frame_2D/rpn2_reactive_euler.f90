@@ -67,6 +67,7 @@ subroutine rpn2(ixy,maxm,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apd
     else
         mu = 3
         mv = 2
+        fspeed = 0
     endif
     ! Note that notation for u and v reflects assumption that the Riemann
     ! problems  are in the x-direction with u in the normal direciton and v in
