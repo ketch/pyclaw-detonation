@@ -56,18 +56,19 @@ subroutine rpn2(ixy,maxm,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apd
 
     ! Common block storage
     ! Ideal gas constant
-    real(kind=8) :: gamma, gamma1, qheat, fspeed
-    common /cparam/  gamma,gamma1,qheat,fspeed
+    real(kind=8) :: gamma, gamma1, qheat, xfspeed, fspeed
+    common /cparam/  gamma,gamma1,qheat, xfspeed
 
     ! Set mu to point to  the component of the system that corresponds to 
     ! momentum in the direction of this slice, mv to the orthogonal momentum:
     if (ixy == 1) then
         mu = 2
         mv = 3
+        fspeed = xfspeed
     else
         mu = 3
         mv = 2
-        fspeed = 0
+        fspeed = 0.d0
     endif
     ! Note that notation for u and v reflects assumption that the Riemann
     ! problems  are in the x-direction with u in the normal direciton and v in
