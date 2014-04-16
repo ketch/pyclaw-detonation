@@ -13,21 +13,21 @@ theta = 1.8
 qheat = q_asympt*gamma1*gamma
 Ea = theta/(gamma1**2)
 
-qheat = 50
+qheat = 20
 Ea = 20
 
 if mpi.COMM_WORLD.Get_rank()==0:
     print('Heat release Q = {} and activation energy = {}'.format(qheat,Ea)) 
 
-T_ign = 2.
+T_ign = 1.5
 
-xmax = 30.
-ymax = 50.
-mx = 200
-my = 200
+xmax = 500.
+ymax = 5.
+mx = 5000
+my = 50
 xs = 25.
-tfinal = 1.
-num_output_times=10
+tfinal = 1000
+num_output_times=100
 
 def b4step(solver, state):
     pass
@@ -69,16 +69,18 @@ def qinit(state,domain,xs=xs):
 
     for i in range(y.size):
         #pprint(y.size)
-        pert = 0.0001 * np.sin(2*4*np.pi*y[i]/ymax) * (x<xs)
-        #pert=0
+        #pert = 0.0001 * np.sin(2*4*np.pi*y[i]/ymax) * (x<xs)
+        pert=0
         #print(np.shape(rho),np.shape(x))
         state.q[0,:,i] = rho + pert
         state.q[1,:,i] = rho * u +pert
-        state.q[2,:,i] = 0. + pert
+        state.q[2,:,i] = rho*v + pert
         state.q[3,:,i] = p/gamma1 + rho*(u**2 + v**2)/2 + qheat * rho * Y  + pert
         state.q[4,:,i] = rho * Y        
 
-    state.problem_data['fspeed']= D
+    q = (gamma**2-1.)*qheat/2/2
+    D = np.sqrt(gamma+q)+np.sqrt(q)
+    state.problem_data['xfspeed']= D
     state.problem_data['k']= k
     
 def step_Euler_reaction(solver,state,dt):
@@ -110,19 +112,23 @@ def custom_bc(state,dim,t,qbc,num_ghost):
             dim_index = i
             break
 
-    #y =state.grid.y.centers
+    y =state.grid.y.centers
     rho_a = 1
     p_a = 1
     u_a = 0
     v_a = 0
-    Y_a = 0.8
+    # Y_a = 1
 
     for i in xrange(num_ghost):
-        qbc[0,-i-1,:] = rho_a
-        qbc[1,-i-1,:] = rho_a*u_a
-        qbc[2,-i-1,:] = rho_a*v_a
-        qbc[3,-i-1,:] = p_a/gamma1 + rho_a*(u_a**2 + v_a**2)/2 + qheat * rho_a * Y_a
-        qbc[4,-i-1,:] = rho_a * Y_a
+        for j in xrange(y.size):
+            layer = np.cos(2*4*np.pi*y[j]/ymax)
+            #layer = 1
+            Y_a = float((layer>0))
+            qbc[0,-i-1,j+2] = rho_a
+            qbc[1,-i-1,j+2] = rho_a*u_a
+            qbc[2,-i-1,j+2] = rho_a*v_a
+            qbc[3,-i-1,j+2] = p_a/gamma1 + rho_a*(u_a**2 + v_a**2)/2 + qheat * rho_a * Y_a
+            qbc[4,-i-1,j+2] = rho_a * Y_a
 
 def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
           outdir='_output', disable_output=False, mx=mx, my=my, tfinal=tfinal,
@@ -141,6 +147,7 @@ def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
 
     
     solver = pyclaw.ClawSolver2D(reactive_euler_roe_2D)
+    #solver = pyclaw.ClawSolver2D(riemann.euler_5wave_2D)
     solver.limiters = [4,4,4,4,2]
     solver.step_source=step_Euler_reaction
     solver.before_step = b4step
@@ -155,7 +162,7 @@ def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
     state.problem_data['gamma1']= gamma1
     state.problem_data['qheat']= qheat
 
-    # The k and fspeed problem data are set inside qinit
+    # The k and xfspeed problem data are set inside qinit
     qinit(state,domain)
 
     solver.cfl_max = 0.5
@@ -163,7 +170,7 @@ def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
     solver.dt_initial=0.005
     solver.source_split = 1
     solver.bc_lower[0]=pyclaw.BC.extrap
-    solver.bc_upper[0]=pyclaw.BC.custom
+    solver.bc_upper[0]=pyclaw.BC.custom 
     solver.user_bc_upper= custom_bc
     solver.bc_lower[1]=pyclaw.BC.periodic
     solver.bc_upper[1]=pyclaw.BC.periodic
