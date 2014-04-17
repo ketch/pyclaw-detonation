@@ -32,9 +32,9 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apdq)
     dimension u(1-mbc:maxmx+mbc),enth(1-mbc:maxmx+mbc),Y(1-mbc:maxmx+mbc)
     dimension c(1-mbc:maxmx+mbc)
     logical :: efix
-    common /cparam/  gamma,gamma1,qheat,fspeed
+    common /cparam/  gamma,gamma1,qheat,xfspeed
 
-    data efix /.false./    !# use entropy fix for transonic rarefactions
+    data efix /.true./    !# use entropy fix for transonic rarefactions
 
 !     # Compute Roe-averaged quantities:
 
@@ -75,25 +75,25 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apdq)
         wave(2,1,i) = a1*(u(i)-c(i))
         wave(3,1,i) = a1*(enth(i) - u(i)*c(i))
         wave(4,1,i) = a1*(Y(i))
-        s(1,i) = u(i)-c(i)-fspeed
+        s(1,i) = u(i)-c(i)-xfspeed
     
         wave(1,2,i) = a2
         wave(2,2,i) = a2*u(i)
         wave(3,2,i) = a2*0.5d0*u(i)**2
         wave(4,2,i) = 0.d0
-        s(2,i) = u(i)-fspeed
+        s(2,i) = u(i)-xfspeed
 
         wave(1,3,i) = 0.d0
         wave(2,3,i) = 0.d0
         wave(3,3,i) = a3*qheat
         wave(4,3,i) = a3
-        s(3,i) = u(i)-fspeed
+        s(3,i) = u(i)-xfspeed
     
         wave(1,4,i) = a4
         wave(2,4,i) = a4*(u(i)+c(i))
         wave(3,4,i) = a4*(enth(i)+u(i)*c(i))
         wave(4,4,i) = a4*Y(i)
-        s(4,i) = u(i)+c(i)-fspeed
+        s(4,i) = u(i)+c(i)-xfspeed
     30 END DO
 
 !     # compute Godunov flux f0:
@@ -143,7 +143,7 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apdq)
         pim1 = gamma1*(qr(3,i-1) - 0.5d0*qr(2,i-1)**2 / rhoim1 - &
         qr(4,i-1)*qheat)
         cim1 = dsqrt(gamma*pim1/rhoim1)
-        s0 = qr(2,i-1)/rhoim1 - cim1 - fspeed    !# u-c in left state (cell i-1)
+        s0 = qr(2,i-1)/rhoim1 - cim1 - xfspeed    !# u-c in left state (cell i-1)
 
     !        # check for fully supersonic case:
         if (s0 >= 0.d0 .AND. s(1,i) > 0.d0)  then
@@ -161,7 +161,7 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apdq)
 
         p1 = gamma1*(rhoen1 - 0.5d0*rhou1**2/rho1 - rhoY*qheat)
         c1 = dsqrt(gamma*p1/rho1)
-        s1 = rhou1/rho1 - c1 - fspeed !# u-c to right of 1-wave
+        s1 = rhou1/rho1 - c1 - xfspeed !# u-c to right of 1-wave
         if (s0 < 0.d0 .AND. s1 > 0.d0) then
         !            # transonic rarefaction in the 1-wave
             sfract = s0 * (s1-s(1,i)) / (s1-s0)
@@ -198,7 +198,7 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apdq)
         rhoi = ql(1,i)
         pi = gamma1*(ql(3,i) - 0.5d0*ql(2,i)**2 / rhoi - ql(4,i)*qheat)
         ci = dsqrt(gamma*pi/rhoi)
-        s3 = ql(2,i)/rhoi + ci - fspeed     !# u+c in right state  (cell i)
+        s3 = ql(2,i)/rhoi + ci - xfspeed     !# u+c in right state  (cell i)
     
         rho2 = ql(1,i) - wave(1,4,i)
         rhou2 = ql(2,i) - wave(2,4,i)
@@ -207,7 +207,7 @@ subroutine rp1(maxmx,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apdq)
 
         p2 = gamma1*(en2 - 0.5d0*rhou2**2/rho2 + rhoY2*qheat)
         c2 = dsqrt(gamma*p2/rho2)
-        s2 = rhou2/rho2 + c2 - fspeed   !# u+c to left of 4-wave
+        s2 = rhou2/rho2 + c2 - xfspeed   !# u+c to left of 4-wave
         if (s2 < 0.d0 .AND. s3 > 0.d0) then
         !            # transonic rarefaction in the 4-wave
             sfract = s2 * (s3-s(4,i)) / (s3-s2)
