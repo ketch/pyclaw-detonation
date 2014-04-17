@@ -18,6 +18,8 @@ Q is the heat release.
 """
 
 import numpy as np
+import mpi4py.MPI as mpi
+from setplot import setplot
 
 gamma = 1.2
 gamma1 = gamma - 1.
@@ -25,104 +27,122 @@ q_asympt = 1.7
 theta = 2.
 qheat = q_asympt*gamma1*gamma
 Ea = theta/(gamma1**2)
+
 qheat = 50
 Ea = 26
-print(qheat, Ea)
-T_ign = 1.01
 
+if mpi.COMM_WORLD.Get_rank()==0:
+    print('Heat release Q = {} and activation energy = {}'.format(qheat,Ea)) 
 
-def compute_f(state):
-    import numpy as np
-#    print('Entered compute_f')
-#    print(state.q[0,:])
-    state.F[0] = state.q[0,:]
+T_ign = 2
 
-def total_variation(state):
-    import numpy as np
+xmax=100
+mx= 2**12
+xs = 50
+tfinal = 100
+num_output_times = 100
 
-    rho = state.q[0,:]
-#    dx=state.grid.delta[0];
-    variation = np.abs(np.diff(rho))
-    state.F[0,:] = np.append(variation, 0)
 
 def step_reaction(solver, state, dt):
-    global k
+    k = state.problem_data['k']
     q = state.q
-    q[0,:] = q[0,:]
-    q[1,:] = q[1,:]
-    q[2,:] = q[2,:]
-    q[3,:] = q[3,:] + dt*omega(q, k)
+    q[3,:] = q[3,:] + dt*omega(state)
 
+def dq_step_reaction(solver, state, dt):
+    k = state.problem_data['k']
+    q = state.q
+    dq = np.zeros(q.shape)
+    dq[3,:] = dt*omega(state)
 
-def omega(q, k):
+    return dq
+
+def omega(state):
     """ Reaction rate function
     """
-    import numpy as np
-    pressure = gamma1*(q[2,:]-0.5*q[1,:]**2/q[0,:] -
+    k = state.problem_data['k']
+    q = state.q
+    rho = q[0,:]
+    u   = q[1,:]/rho
+    press = gamma1*(q[2,:]-0.5*q[1,:]**2/q[0,:] -
                         qheat*q[3,:])
-    T = pressure / q[0,:]
-    return -k*(q[3,:])*np.exp(Ea*(1-1/T))*(T>T_ign)
+    T = press/rho
+    return -k*(q[3,:])*np.exp(Ea*(1-1/T))*(T>T_ign)    
 
-def temperature(current_data):
-    pressure = gamma1*(current_data.q[2,:]-0.5*current_data.q[1,:]**2/current_data.q[0,:] -
-                        qheat*current_data.q[3,:])
-    T = pressure / current_data.q[0,:]
-    return T
-
-def pressure(current_data):
-    """Computes the pressure from the conserved quantities"""
-    pressure = gamma1*(current_data.q[2,:]-0.5*current_data.q[1,:]**2/current_data.q[0,:] -
-                        qheat*current_data.q[3,:])
-    return pressure
-
-def forward_char(current_data):
-    """Computes the pressure from the conserved quantities"""
-    global D
-    q = current_data.q
-    return (current_data.q[1,:]/current_data.q[0,:]
-            + np.sqrt(gamma*pressure(current_data)/current_data.q[0,:]) - D)
-
-def velocity(current_data):
-    """Computes the velocity from the conserved quantities"""
-    velocity = current_data.q[1,:]/current_data.q[0,:]
-    return velocity
-
-def reacVar(current_data):
-    """Computes reaction progress variable lambda"""
-    out = current_data.q[3,:]/current_data.q[0,:]
-    return out
-
-def add_true_solution(current_data):
-    '''Adds a plot of true solution
-    '''
-    from pylab import plot
-    x = current_data.x
-    t = current_data.t
-    ptrue = x*t
-    plot(x,ptrue,'r')
-
-
-def setup(outdir='./_output'):
-
-    global k, D
-
-    import numpy as np
-    import matplotlib.pylab as plt
-    from clawpack import pyclaw
-    #from clawpack import riemann
-    import reactive_euler_roe
-    import reactive_euler_exact
+def qinit(state,domain,xs=xs):
     import steadyState as steadyState
 
-    solver = pyclaw.ClawSolver1D(reactive_euler_roe)
-    solver.step_source = step_reaction
+    grid = state.grid
+    ((ixlower,ixupper),) = domain.patch._da.getRanges()
+
+
+    dx = grid.delta[0] #Could be problem for non-uniform grid
+    xglobal = np.linspace(dx/2,xmax-dx/2,mx)
+
+    x =grid.x.centers
+    xl = xglobal[xglobal<xs]
+
+    rhol, Ul, pl, laml, D, k = steadyState.steadyState(qheat, Ea, gamma, xl)
+    ul = Ul + D
+    Yl = 1- laml
+
+    rhor = 1.*np.ones(np.shape(xglobal[xglobal>=xs]))
+    ur = 0.0*np.ones(np.shape(xglobal[xglobal>=xs]))
+    pr = 1*np.ones(np.shape(xglobal[xglobal>=xs]))
+    Yr = 1.*np.ones(np.shape(xglobal[xglobal>=xs]))
+
+    rhog = np.append(rhol, rhor)
+    ug = np.append(ul, ur)
+    vg = 0.*ug
+    pg = np.append(pl, pr)
+    Yg = np.append(Yl, Yr)
+
+    rho = rhog[ixlower:ixupper]
+    u = ug[ixlower:ixupper]
+    v = vg[ixlower:ixupper]
+    p = pg[ixlower:ixupper]
+    Y = Yg[ixlower:ixupper]
+
+    pert = 0.000 * np.sin(2*4*np.pi*x) * (x<xs)
+    state.q[0,:] = rho + pert
+    state.q[1,:] = rho * u +pert
+    state.q[2,:] = p/gamma1 + rho*(u**2)/2 + qheat * rho * Y  + pert
+    state.q[3,:] = rho * Y
+
+    state.problem_data['xfspeed']= D
+    state.problem_data['k']= k
+
+
+def setup(outdir='./_output',use_petsc=False, mx=mx, tfinal=tfinal,
+          num_output_times=num_output_times, solver_type='classic'):
+
+    from clawpack import riemann
+    import reactive_euler_roe_1D
+
+    if use_petsc:
+        import clawpack.petclaw as pyclaw
+    else:
+        from clawpack import pyclaw
+
+    if solver_type=='sharpclaw':
+        solver = pyclaw.SharpClawSolver1D(reactive_euler_roe_1D)
+        solver.dq_src= dq_step_reaction
+        solver.weno_order = 5
+        #solver.lim_type = 1
+        #solver.time_integrator = "SSP33"
+    else:
+        solver = pyclaw.ClawSolver1D(reactive_euler_roe_1D)
+        solver.limiters = [1,1,1,1]
+        solver.step_source = step_reaction
+        solver.order = 2
 
     solver.bc_lower[0]=pyclaw.BC.extrap
     solver.bc_upper[0]=pyclaw.BC.extrap
 
+    solver.num_waves = 4
+    solver.num_eqn = 4
+
+
     # Initialize domain
-    mx=1000
-    xmax=50
     x = pyclaw.Dimension('x',0.0,xmax,mx)
     domain = pyclaw.Domain([x])
     num_eqn = 4
@@ -134,118 +154,21 @@ def setup(outdir='./_output'):
     state.problem_data['Ea'] = Ea
     state.problem_data['T_ign'] = T_ign
 
-    x =state.grid.x.centers
-    xs = xmax-5
-    xdet = x[x<xs]
-
-    rhol, Ul, pl, laml, D, k = steadyState.steadyState(qheat, Ea, gamma, xdet)
-    ul = Ul + D
-    Yl = 1-laml
-    state.problem_data['fspeed'] = D
-#    state.problem_data['k'] = xscale
-
-    rhor = 1.*np.ones(np.shape(x[x>=xs]))
-    ur = 0.0*np.ones(np.shape(x[x>=xs]))
-    pr = 1*np.ones(np.shape(x[x>=xs]))
-    Yr = 1.*np.ones(np.shape(x[x>=xs]))
-
-    rho = np.append(rhol, rhor)
-    u = np.append(ul, ur)
-    p = np.append(pl, pr)
-    Y = np.append(Yl, Yr)
-
-#    plt.plot(x, rho, x, Y, x, u, x, p)
-#    plt.legend(('rho', 'Y', 'u','p'))
-#    plt.show()
-
-    state.q[0,:] = rho
-    state.q[1,:] = rho * u
-    state.q[2,:] = p/gamma1 + rho*u**2/2 + qheat * rho * Y
-    state.q[3,:] = rho * Y
-
-    state.mF = 1
+    qinit(state,domain)
 
     claw = pyclaw.Controller()
-    claw.compute_F = total_variation
-    claw.tfinal = 50
+
+    claw.tfinal = tfinal
     claw.solution = pyclaw.Solution(state,domain)
     claw.solver = solver
-    claw.num_output_times = 50
+    claw.keep_copy = False
+    claw.num_output_times = num_output_times
     claw.outdir = outdir
     claw.setplot = setplot
-    claw.keep_copy = True
-
-    #state.mp = 1
-    #claw.compute_p = pressure
-    #claw.write_aux_always = 'True'
+    #claw.output_format = ['hdf5', 'ascii']
+    claw.output_format = 'ascii'
 
     return claw
-
-#--------------------------
-def setplot(plotdata):
-#--------------------------
-    """
-    Specify what is to be plotted at each frame.
-    Input:  plotdata, an instance of visclaw.data.ClawPlotData.
-    Output: a modified version of plotdata.
-    """
-    plotdata.clearfigures()  # clear any old figures,axes,items data
-
-    # Figure for pressure
-    plotfigure = plotdata.new_plotfigure(name='Pressure', figno=0)
-
-    # Set up for axes in this figure:
-    plotaxes = plotfigure.new_plotaxes()
-    plotaxes.title = 'pressure'
-
-    # Set up for item on these axes:
-    plotitem = plotaxes.new_plotitem(plot_type='1d')
-    plotitem.plot_var = pressure
-    plotitem.plotstyle = 'o-'
-    plotitem.color = 'b'
-
-#    plotaxes.afteraxes = add_true_solution
-
-    # Figure for velocity
-    plotfigure = plotdata.new_plotfigure(name='u+c-D', figno=1)
-
-    # Set up for axes in this figure:
-    plotaxes = plotfigure.new_plotaxes()
-    plotaxes.title = 'u+c-D'
-
-    # Set up for item on these axes:
-    plotitem = plotaxes.new_plotitem(plot_type='1d')
-    plotitem.plot_var = forward_char
-    plotitem.plotstyle = 'o-'
-    plotitem.color = 'b'
-
-    # Figure for Y
-    plotfigure = plotdata.new_plotfigure(name='Y', figno=3)
-
-    # Set up for axes in this figure:
-    plotaxes = plotfigure.new_plotaxes()
-    plotaxes.title = 'Y'
-
-    # Set up for item on these axes:
-    plotitem = plotaxes.new_plotitem(plot_type='1d')
-    plotitem.plot_var = reacVar
-    plotitem.plotstyle = 'o-'
-    plotitem.color = 'b'
-
-    # Figure for q[1]
-    plotfigure = plotdata.new_plotfigure(name='Temperature', figno=2)
-
-    # Set up for axes in this figure:
-    plotaxes = plotfigure.new_plotaxes()
-    plotaxes.title = 'Temperature'
-
-    # Set up for item on these axes:
-    plotitem = plotaxes.new_plotitem(plot_type='1d')
-    plotitem.plot_var = temperature
-    plotitem.plotstyle = 'o-'
-    plotitem.color = 'b'
-
-    return plotdata
 
 if __name__=="__main__":
     from clawpack.pyclaw.util import run_app_from_main
