@@ -28,19 +28,20 @@ theta = 2.
 qheat = q_asympt*gamma1*gamma
 Ea = theta/(gamma1**2)
 
-qheat = 50
-Ea = 26
+qheat = 0.01
+Ea = 5
 
 if mpi.COMM_WORLD.Get_rank()==0:
     print('Heat release Q = {} and activation energy = {}'.format(qheat,Ea)) 
 
-T_ign = 2
+T_ign = 1.0001
 
+xmin=0
 xmax=100
-mx= 2**12
-xs = 50
-tfinal = 100
-num_output_times = 100
+mx= 5000
+xs = 80
+tfinal = 1000
+num_output_times = 1000
 
 
 def step_reaction(solver, state, dt):
@@ -68,7 +69,32 @@ def omega(state):
     T = press/rho
     return -k*(q[3,:])*np.exp(Ea*(1-1/T))*(T>T_ign)    
 
-def qinit(state,domain,xs=xs):
+
+def custom_bc(state,dim,t,qbc,num_ghost):
+    """Right boundary condition
+    """
+    for (i,state_dim) in enumerate(state.patch.dimensions):
+        if state_dim.name == dim.name:
+            dim_index = i
+            break
+
+    rho_a = 1
+    p_a = 1
+    u_a = 0
+    # Y_a = 1
+    D = state.problem_data['xfspeed']
+    freq = 0.2
+
+    for i in xrange(num_ghost):
+        #Y_a = 0.5 - 0.5*np.cos(2*0.2*np.pi*t)
+        Y_a = float(np.sin(2*freq*D*np.pi*t)>0)
+        qbc[0,-i-1] = rho_a
+        qbc[1,-i-1] = rho_a*u_a
+        qbc[2,-i-1] = p_a/gamma1 + rho_a*(u_a**2)/2 + qheat * rho_a * Y_a
+        qbc[3,-i-1] = rho_a * Y_a
+
+
+def qinit_znd(state,domain,xs=xs):
     import steadyState as steadyState
 
     grid = state.grid
@@ -108,8 +134,34 @@ def qinit(state,domain,xs=xs):
     state.q[2,:] = p/gamma1 + rho*(u**2)/2 + qheat * rho * Y  + pert
     state.q[3,:] = rho * Y
 
-    state.problem_data['xfspeed']= D
+    state.problem_data['xfspeed']= D/2
     state.problem_data['k']= k
+
+def qinit_pulse(state,domain,xs=xs):
+
+    import steadyState as steadyState
+
+    grid = state.grid
+    x =grid.x.centers
+
+    rhol, Ul, pl, laml, D, k = steadyState.steadyState(qheat, Ea, gamma, x)
+
+    amp = 0.01
+    width = 10
+    pulse = amp*np.exp(-(x-xs)**2/width)
+
+    rho_a = 1 + pulse
+    p_a = 1 + pulse
+    u_a = 0
+
+    state.q[0,:] = rho_a
+    state.q[1,:] = rho_a*u_a 
+    state.q[2,:] = p_a/gamma1 + rho_a*(u_a**2)/2
+    state.q[3,:] = 0
+
+    state.problem_data['xfspeed']= D*0.9
+    state.problem_data['k']= k
+    print(k)
 
 
 def setup(outdir='./_output',use_petsc=False, mx=mx, tfinal=tfinal,
@@ -136,14 +188,15 @@ def setup(outdir='./_output',use_petsc=False, mx=mx, tfinal=tfinal,
         solver.order = 2
 
     solver.bc_lower[0]=pyclaw.BC.extrap
-    solver.bc_upper[0]=pyclaw.BC.extrap
+    solver.bc_upper[0]=pyclaw.BC.custom
+    solver.user_bc_upper = custom_bc
 
     solver.num_waves = 4
     solver.num_eqn = 4
 
 
     # Initialize domain
-    x = pyclaw.Dimension('x',0.0,xmax,mx)
+    x = pyclaw.Dimension('x',xmin,xmax,mx)
     domain = pyclaw.Domain([x])
     num_eqn = 4
     state = pyclaw.State(domain,num_eqn)
@@ -154,7 +207,7 @@ def setup(outdir='./_output',use_petsc=False, mx=mx, tfinal=tfinal,
     state.problem_data['Ea'] = Ea
     state.problem_data['T_ign'] = T_ign
 
-    qinit(state,domain)
+    qinit_pulse(state,domain)
 
     claw = pyclaw.Controller()
 
@@ -166,7 +219,7 @@ def setup(outdir='./_output',use_petsc=False, mx=mx, tfinal=tfinal,
     claw.outdir = outdir
     claw.setplot = setplot
     #claw.output_format = ['hdf5', 'ascii']
-    claw.output_format = 'ascii'
+    #claw.output_format = 'ascii'
 
     return claw
 
