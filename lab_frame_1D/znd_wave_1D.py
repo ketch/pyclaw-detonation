@@ -28,20 +28,20 @@ theta = 2.
 qheat = q_asympt*gamma1*gamma
 Ea = theta/(gamma1**2)
 
-qheat = 0.01
-Ea = 5
+qheat = 0.4
+Ea = 65
 
 if mpi.COMM_WORLD.Get_rank()==0:
-    print('Heat release Q = {} and activation energy = {}'.format(qheat,Ea)) 
+    print('Heat release Q = {} and activation energy = {}'.format(qheat,Ea))
 
 T_ign = 1.0001
 
 xmin=0
-xmax=100
-mx= 5000
-xs = 80
-tfinal = 1000
-num_output_times = 1000
+xmax=50
+mx= 1000
+xs = xmax-5
+tfinal = 5000
+num_output_times = 5000
 
 
 def step_reaction(solver, state, dt):
@@ -67,7 +67,7 @@ def omega(state):
     press = gamma1*(q[2,:]-0.5*q[1,:]**2/q[0,:] -
                         qheat*q[3,:])
     T = press/rho
-    return -k*(q[3,:])*np.exp(Ea*(1-1/T))*(T>T_ign)    
+    return -k*(q[3,:])*np.exp(Ea*(1-1/T))*(T>T_ign)
 
 
 def custom_bc(state,dim,t,qbc,num_ghost):
@@ -134,7 +134,7 @@ def qinit_znd(state,domain,xs=xs):
     state.q[2,:] = p/gamma1 + rho*(u**2)/2 + qheat * rho * Y  + pert
     state.q[3,:] = rho * Y
 
-    state.problem_data['xfspeed']= D/2
+    state.problem_data['xfspeed']= D
     state.problem_data['k']= k
 
 def qinit_pulse(state,domain,xs=xs):
@@ -155,7 +155,7 @@ def qinit_pulse(state,domain,xs=xs):
     u_a = 0
 
     state.q[0,:] = rho_a
-    state.q[1,:] = rho_a*u_a 
+    state.q[1,:] = rho_a*u_a
     state.q[2,:] = p_a/gamma1 + rho_a*(u_a**2)/2
     state.q[3,:] = 0
 
@@ -169,6 +169,7 @@ def setup(outdir='./_output',use_petsc=False, mx=mx, tfinal=tfinal,
 
     from clawpack import riemann
     import reactive_euler_roe_1D
+    import reactive_euler_efix_roe_1D
 
     if use_petsc:
         import clawpack.petclaw as pyclaw
@@ -188,7 +189,7 @@ def setup(outdir='./_output',use_petsc=False, mx=mx, tfinal=tfinal,
         solver.order = 2
 
     solver.bc_lower[0]=pyclaw.BC.extrap
-    solver.bc_upper[0]=pyclaw.BC.custom
+    solver.bc_upper[0]=pyclaw.BC.extrap
     solver.user_bc_upper = custom_bc
 
     solver.num_waves = 4
@@ -207,7 +208,7 @@ def setup(outdir='./_output',use_petsc=False, mx=mx, tfinal=tfinal,
     state.problem_data['Ea'] = Ea
     state.problem_data['T_ign'] = T_ign
 
-    qinit_pulse(state,domain)
+    qinit_znd(state,domain)
 
     claw = pyclaw.Controller()
 

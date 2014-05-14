@@ -8,26 +8,36 @@ from setplot import setplot
 
 gamma = 1.2
 gamma1 = gamma - 1.
-q_asympt = 1.7
-theta = 1.8
-qheat = q_asympt*gamma1*gamma
-Ea = theta/(gamma1**2)
+gamma1a = gamma;
+epsi = (gamma-1)/(gamma1a);
 
-qheat = 20
-Ea = 20
+#q_asympt = 1.7
+#theta = 1.65
+# Ea = theta/epsi**2*gamma/gamma1a;
+# qheat = epsi*q_asympt;
+
+qheat = 0.4
+Ea = 50.
+q_asympt = qheat/(epsi)
+theta = Ea*(epsi**2)
+
 
 if mpi.COMM_WORLD.Get_rank()==0:
-    print('Heat release Q = {} and activation energy = {}'.format(qheat,Ea)) 
+    print('Heat release Q = {} and activation energy = {}'.format(qheat,Ea))
 
-T_ign = 1.5
+if mpi.COMM_WORLD.Get_rank()==0:
+    print('Asymptotic q = {} and theta = {}'.format(q_asympt,theta))
 
-xmax = 500.
-ymax = 5.
-mx = 5000
-my = 50
-xs = 25.
-tfinal = 1000
-num_output_times=100
+T_ign = 1.001
+
+xmax = 40.
+ymax = 20./np.sqrt(epsi)/np.sqrt(2.)/(q_asympt**(1./4.))
+# ymax = 20
+mx = 200
+my = ymax/xmax*mx
+xs = xmax-5.
+tfinal = 4000
+num_output_times= 2000
 
 def b4step(solver, state):
     pass
@@ -50,6 +60,7 @@ def qinit(state,domain,xs=xs):
     ul = Ul + D
     Yl = 1- laml
 
+
     rhor = 1.*np.ones(np.shape(xglobal[xglobal>=xs]))
     ur = 0.0*np.ones(np.shape(xglobal[xglobal>=xs]))
     pr = 1*np.ones(np.shape(xglobal[xglobal>=xs]))
@@ -68,21 +79,24 @@ def qinit(state,domain,xs=xs):
     Y = Yg[ixlower:ixupper]
 
     for i in range(y.size):
-        #pprint(y.size)
-        #pert = 0.0001 * np.sin(2*4*np.pi*y[i]/ymax) * (x<xs)
-        pert=0
+        pert = 0
+        for j in range(1,11):
+            pert = pert + 0.001 * np.sin(2*j*np.pi*y[i]/ymax) * (x<xs)
+        #pert=0
         #print(np.shape(rho),np.shape(x))
         state.q[0,:,i] = rho + pert
         state.q[1,:,i] = rho * u +pert
         state.q[2,:,i] = rho*v + pert
         state.q[3,:,i] = p/gamma1 + rho*(u**2 + v**2)/2 + qheat * rho * Y  + pert
-        state.q[4,:,i] = rho * Y        
+        state.q[4,:,i] = rho * Y
 
-    q = (gamma**2-1.)*qheat/2/2
-    D = np.sqrt(gamma+q)+np.sqrt(q)
     state.problem_data['xfspeed']= D
     state.problem_data['k']= k
-    
+
+    if mpi.COMM_WORLD.Get_rank()==0:
+        print('k = {}   D = {}'.format(k,D))
+
+
 def step_Euler_reaction(solver,state,dt):
     """
     Source terms for reactive Euler equations.
@@ -90,6 +104,21 @@ def step_Euler_reaction(solver,state,dt):
     """
     q = state.q
     q[4,:,:] = q[4,:,:] + dt*omega(state)
+
+def step_Euler_reaction_dq(solver,state,dt):
+    """
+    Source terms for reactive Euler equations.
+    This is a Clawpack-style source term routine.
+    """
+    q = state.q
+    dq = np.empty(q.shape)
+    dq[0,:,:] = 0
+    dq[1,:,:] = 0
+    dq[2,:,:] = 0
+    dq[3,:,:] = 0
+    dq[4,:,:] = dt*omega(state)
+
+    return dq
 
 def omega(state):
     """ Reaction rate function
@@ -101,34 +130,8 @@ def omega(state):
     v   = q[2,:,:]/rho
     press = gamma1 *  (q[3,:,:] - 0.5*rho*(u**2 + v**2) - qheat*q[4,:,:])
     T = press/rho
-    
+
     return -k*(q[4,:,:])*np.exp(Ea*(1-1/T))*(T>T_ign)
-
-def custom_bc(state,dim,t,qbc,num_ghost):
-    """Right boundary condition
-    """
-    for (i,state_dim) in enumerate(state.patch.dimensions):
-        if state_dim.name == dim.name:
-            dim_index = i
-            break
-
-    y =state.grid.y.centers
-    rho_a = 1
-    p_a = 1
-    u_a = 0
-    v_a = 0
-    # Y_a = 1
-
-    for i in xrange(num_ghost):
-        for j in xrange(y.size):
-            layer = np.cos(2*4*np.pi*y[j]/ymax)
-            #layer = 1
-            Y_a = float((layer>0))
-            qbc[0,-i-1,j+2] = rho_a
-            qbc[1,-i-1,j+2] = rho_a*u_a
-            qbc[2,-i-1,j+2] = rho_a*v_a
-            qbc[3,-i-1,j+2] = p_a/gamma1 + rho_a*(u_a**2 + v_a**2)/2 + qheat * rho_a * Y_a
-            qbc[4,-i-1,j+2] = rho_a * Y_a
 
 def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
           outdir='_output', disable_output=False, mx=mx, my=my, tfinal=tfinal,
@@ -138,19 +141,39 @@ def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
     """
     from clawpack import riemann
 
+    import reactive_euler_efix_roe_2D
     import reactive_euler_roe_2D
+    import reactive_euler_LLF_roe_2D
+    import reactive_euler_harten_roe_2D
 
     if use_petsc:
         import clawpack.petclaw as pyclaw
     else:
         from clawpack import pyclaw
 
-    
-    solver = pyclaw.ClawSolver2D(reactive_euler_roe_2D)
-    #solver = pyclaw.ClawSolver2D(riemann.euler_5wave_2D)
-    solver.limiters = [4,4,4,4,2]
-    solver.step_source=step_Euler_reaction
+    if solver_type=='sharpclaw':
+        #solver = pyclaw.SharpClawSolver2D(reactive_euler_efix_roe_2D)
+        #solver = pyclaw.SharpClawSolver2D(reactive_euler_roe_2D)
+        solver = pyclaw.SharpClawSolver2D(reactive_euler_LLF_roe_2D)
+        solver.dq_src = step_Euler_reaction_dq
+        solver.weno_order = 5
+        solver.lim_type = 2
+    else:
+        solver = pyclaw.ClawSolver2D(reactive_euler_efix_roe_2D)
+        #solver = pyclaw.ClawSolver2D(reactive_euler_roe_2D)
+        #solver = pyclaw.ClawSolver2D(reactive_euler_LLF_roe_2D)
+        #solver = pyclaw.ClawSolver2D(reactive_euler_harten_roe_2D)
+        solver.order = 2
+
+        #solver.limiters = [4,4,4,4,2]
+        solver.step_source=step_Euler_reaction
+
+
+
     solver.before_step = b4step
+
+    solver.num_eqn = 5
+    solver.num_waves = 5
 
     # Initialize domain
     x = pyclaw.Dimension('x',0.0,xmax,mx)
@@ -168,12 +191,13 @@ def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
     solver.cfl_max = 0.5
     solver.cfl_desired = 0.45
     solver.dt_initial=0.005
-    solver.source_split = 1
+#    solver.source_split = 1
     solver.bc_lower[0]=pyclaw.BC.extrap
-    solver.bc_upper[0]=pyclaw.BC.custom 
-    solver.user_bc_upper= custom_bc
-    solver.bc_lower[1]=pyclaw.BC.periodic
-    solver.bc_upper[1]=pyclaw.BC.periodic
+    solver.bc_upper[0]=pyclaw.BC.extrap
+    solver.bc_lower[1]=pyclaw.BC.wall
+    solver.bc_upper[1]=pyclaw.BC.wall
+
+    #print(solver.dimensional_split)
 
     claw = pyclaw.Controller()
     claw.solution = pyclaw.Solution(state,domain)
@@ -190,11 +214,9 @@ def setup(use_petsc=False,kernel_language='Fortran',solver_type='classic',
     claw.setplot = setplot
 
     return claw
-    
+
 #--------------------------
-    
+
 if __name__=="__main__":
     from clawpack.pyclaw.util import run_app_from_main
     output = run_app_from_main(setup,setplot)
-
-

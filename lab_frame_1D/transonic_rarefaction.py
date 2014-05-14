@@ -23,8 +23,8 @@ import numpy as np
 def setup(use_petsc=False, outdir='./_output', solver_type='classic'):
 
     from clawpack import pyclaw
-    import euler_roe_1D
-    import euler_efix_roe_1D
+    import reactive_euler_roe_1D
+    import reactive_euler_efix_roe_1D
 
 
     if use_petsc:
@@ -32,36 +32,31 @@ def setup(use_petsc=False, outdir='./_output', solver_type='classic'):
     else:
         from clawpack import pyclaw
 
-    if solver_type=='sharpclaw':
-        solver = pyclaw.SharpClawSolver1D(riemann.euler_with_efix_1D)
-        solver.weno_order = 5
+    #solver = pyclaw.ClawSolver1D(reactive_euler_roe_1D)
+    solver = pyclaw.ClawSolver1D(reactive_euler_efix_roe_1D)
 
-        #solver.lim_type = 2
-        solver.char_decomp = 1
-        solver.time_integrator = 'SSP104'
-    else:
-        #solver = pyclaw.ClawSolver1D(euler_roe_1D)
-        solver = pyclaw.ClawSolver1D(euler_efix_roe_1D)
 
 
     solver.bc_lower[0]=pyclaw.BC.extrap
     solver.bc_upper[0]=pyclaw.BC.extrap
-    solver.order = 1
+    solver.order = 2
     solver.limiters = 1
-    solver.num_waves = 3
-    solver.num_eqn = 3
-
+    solver.num_waves = 4
+    solver.num_eqn = 4
 
     # Initialize domain
     mx=400;
     x = pyclaw.Dimension('x',0.0,4.0,mx)
     domain = pyclaw.Domain([x])
-    num_eqn = 3
-    state = pyclaw.State(domain,num_eqn)
+    state = pyclaw.State(domain,solver.num_eqn)
 
     state.problem_data['gamma']= gamma
     state.problem_data['gamma1']= gamma1
-
+    state.problem_data['qheat']= 1
+    state.problem_data['Ea'] = 0
+    state.problem_data['k'] = 0
+    state.problem_data['T_ign'] = 0
+    state.problem_data['xfspeed'] = 0
 
     rhol =  1.
     rhor = 0.125
@@ -77,6 +72,7 @@ def setup(use_petsc=False, outdir='./_output', solver_type='classic'):
     state.q[1,:] = (x>xs1)*(x<xs2)*rhol*ul + ~((x>xs1)*(x<xs2))*rhor*ur
     state.q[2,:] = ((x>xs1)*(x<xs2)*(pl/gamma1 + rhol*ul**2/2) +
                     ~((x>xs1)*(x<xs2))*(pr/gamma1 + rhor*ur**2/2) )
+    state.q[3,:] = 0.2
 
 #    rhol =  1.
 #    rhor = 0.125
@@ -92,10 +88,10 @@ def setup(use_petsc=False, outdir='./_output', solver_type='classic'):
 #    state.q[2,:] = (x<xs)*(pl/gamma1 + rhol*ul**2/2) + (x>=xs)*(pr/gamma1 + rhor*ur**2/2)
 ##
     claw = pyclaw.Controller()
-    claw.tfinal = 2.
+    claw.tfinal = 10
     claw.solution = pyclaw.Solution(state,domain)
     claw.solver = solver
-    claw.num_output_times = 10
+    claw.num_output_times = 100
     claw.outdir = outdir
     claw.setplot = setplot
     claw.keep_copy = True

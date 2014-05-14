@@ -49,7 +49,7 @@ subroutine rpn2(ixy,maxm,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apd
 
     real(kind=8) :: rhoim1, pim1, cim1, s0, rho1, rhou1, rhov1, rhoY1, en1, p1, c1, s1
     real(kind=8) :: sfract, rhoi, pi, ci, s3, rho2, rhou2, rhov2, rhoY2, en2, p2, c2
-    real(kind=8) :: s2, df
+    real(kind=8) :: s2, df, del, sa
 
     ! Use entropy fix for transonic rarefactions
     logical, parameter :: efix = .true.
@@ -80,6 +80,7 @@ subroutine rpn2(ixy,maxm,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apd
     wave = 0.d0
     s = 0.d0
 
+    del = 0.1
     ! Primary loop over grid cell interfaces
     do i = 2-mbc, mx+mbc
         ! Compute Roe-averaged quantities
@@ -168,7 +169,30 @@ subroutine rpn2(ixy,maxm,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apd
 
     end do
 
-    if (.not.efix) then
+    if (efix) then
+        ! Compute flux differences amdq and apdq.
+        ! No entropy fix
+        !
+        ! amdq = SUM s*wave   over left-going waves
+
+        amdq = 0.d0
+        apdq = 0.d0
+        do i=2-mbc, mx+mbc
+           do mw=1,mwaves
+              sa = abs(s(mw,i))
+              if (sa > del) then
+                 a = sa
+              else
+                 a = (s(mw,i)**2 + del**2 )/(2*del)
+              endif
+
+              amdq(:,i) = amdq(:,i) + 0.5d0*(s(mw,i) - a) * wave(:,mw,i)
+              apdq(:,i) = apdq(:,i) + 0.5d0*(s(mw,i) + a) * wave(:,mw,i)
+
+           enddo
+        enddo
+
+     else
         ! Compute flux differences amdq and apdq.
         ! No entropy fix
         !
@@ -186,104 +210,7 @@ subroutine rpn2(ixy,maxm,meqn,mwaves,maux,mbc,mx,ql,qr,auxl,auxr,wave,s,amdq,apd
             enddo
         enddo
 
-    else
-        ! With entropy fix
-
-        ! compute flux differences amdq and apdq.
-        ! First compute amdq as sum of s*wave for left going waves.
-        ! Incorporate entropy fix by adding a modified fraction of wave
-        ! if s should change sign.
-        amdq = 0.d0
-        apdq = 0.d0
-        do i = 2-mbc, mx+mbc
-            ! Check 1-wave
-            rhoim1 = qr(1,i-1)
-            pim1 = gamma1*(qr(4,i-1) - 0.5d0*(qr(mu,i-1)**2 + qr(mv,i-1)**2) / rhoim1 &
-                 - qheat*qr(5,i-1))
-            cim1 = dsqrt(gamma*pim1/rhoim1)
-            s0 = qr(mu,i-1)/rhoim1 - cim1 - fspeed     ! u-c in left state (cell i-1)
-
-            ! Check for fully supersonic case:
-            if (s0 >= 0.d0 .and. s(1,i) > 0.d0)  then
-                ! Everything is right-going
-                cycle
-            endif
-
-            rho1 = qr(1,i-1) + wave(1,1,i)
-            rhou1 = qr(mu,i-1) + wave(mu,1,i)
-            rhov1 = qr(mv,i-1) + wave(mv,1,i)
-            en1 = qr(4,i-1) + wave(4,1,i)
-            rhoY1 = qr(5,i) + wave(5,1,i)
-
-            p1 = gamma1 * (en1 - 0.5d0 * (rhou1**2 + rhov1**2) / rho1 - rhoY1*qheat)
-            c1 = sqrt(gamma * p1 / rho1)
-            s1 = rhou1 / rho1 - c1 - fspeed  ! u-c to right of 1-wave
-            if (s0 < 0.d0 .and. s1 > 0.d0) then
-               ! Transonic rarefaction in the 1-wave
-                sfract = s0 * (s1-s(1,i)) / (s1-s0)
-            else if (s(1,i) < 0.d0) then
-                ! 1-wave is leftgoing
-                sfract = s(1,i)
-            else
-                ! 1-wave is rightgoing
-                sfract = 0.d0   ! This shouldn't happen since s0 < 0
-            endif
-            do m=1,meqn
-                amdq(m,i) = sfract * wave(m,1,i)
-            end do
-
-            ! Check contact discontinuity:
-            if (s(2,i) >= 0.d0) then
-                !# 2- 3- and 4-waves are rightgoing
-                cycle
-            endif
-
-            amdq(:,i) = amdq(:,i) + s(2,i) * wave(:,2,i)
-            amdq(:,i) = amdq(:,i) + s(3,i) * wave(:,3,i)
-            amdq(:,i) = amdq(:,i) + s(4,i) * wave(:,4,i)
-
-            ! Check 5-wave:
-            rhoi = ql(1,i)
-            pi = gamma1*(ql(4,i) - 0.5d0*(ql(mu,i)**2 + ql(mv,i)**2) / rhoi &
-                 - qheat*ql(5,i) )
-            ci = sqrt(gamma*pi/rhoi)
-            s3 = ql(mu,i)/rhoi + ci - fspeed    ! u+c in right state  (cell i)
-
-            rho2 = ql(1,i) - wave(1,5,i)
-            rhou2 = ql(mu,i) - wave(mu,5,i)
-            rhov2 = ql(mv,i) - wave(mv,5,i)
-            en2 = ql(4,i) - wave(4,5,i)
-            rhoY2 = ql(5,i) - wave(5,5,i)
-
-            p2 = gamma1*(en2 - 0.5d0*(rhou2**2 + rhov2**2)/rho2 - rhoY2*qheat)
-            c2 = sqrt(gamma*p2/rho2)
-            s2 = rhou2/rho2 + c2 - fspeed   ! u+c to left of 4-wave
-            if (s2 < 0.d0 .and. s3 > 0.d0) then
-               ! Transonic rarefaction in the 5-wave
-                sfract = s2 * (s3-s(5,i)) / (s3-s2)
-            else if (s(5,i) < 0.d0) then
-                ! 5-wave is leftgoing
-                sfract = s(5,i)
-            else
-                ! 5-wave is rightgoing
-                cycle
-             endif
-
-            amdq(:,i) = amdq(:,i) + sfract * wave(:,5,i)
-        enddo
-
-        ! Compute the remaining right-going flux differences:
-        ! df = SUM s*wave   is the total flux difference and apdq = df - amdq
-        do m=1,meqn
-            do i = 2-mbc, mx+mbc
-                df = 0.d0
-                do mw=1,mwaves
-                    df = df + s(mw,i) * wave(m,mw,i)
-                enddo
-                apdq(m,i) = df - amdq(m,i)
-            enddo
-        enddo
-
         ! End of entropy corrections
-    endif
+     endif
+
 end subroutine rpn2

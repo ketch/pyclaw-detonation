@@ -1,4 +1,4 @@
-def setplot(plotdata):
+def setplot_transonic(plotdata):
 #--------------------------
     """
     Specify what is to be plotted at each frame.
@@ -8,7 +8,7 @@ def setplot(plotdata):
     from clawpack.visclaw import colormaps
     import numpy as np
     from znd_wave_2D import gamma,qheat,Ea,gamma1
-    D = 1.4315
+
 
     # Define pressure for plotting
     def pressure(current_data):
@@ -27,10 +27,9 @@ def setplot(plotdata):
 
     def fchar(current_data):
         """Computes the velocity from the conserved quantities"""
-
         x = current_data.x
         p = pressure(current_data)
-        out = current_data.q[1,:,:]/current_data.q[0,:,:] +     np.sqrt(gamma*p/current_data.q[0,:,:]) - D
+        out = current_data.q[1,:,:]/current_data.q[0,:,:] -     np.sqrt(gamma*p/current_data.q[0,:,:])
         return x[:,0],out[:,0]
 
     # def temperature(current_data):
@@ -58,16 +57,17 @@ def setplot(plotdata):
 
     plotdata.clearfigures()  # clear any old figures,axes,items data
 
-    # Density plot
-    plotfigure = plotdata.new_plotfigure(name='Density gradient', figno=0)
-    plotaxes = plotfigure.new_plotaxes()
-    plotaxes.title = 'Density gradient'
-    plotaxes.scaled = False      # so aspect ratio is 1
-    plotaxes.afteraxes = label_axes
+    # # Density plot
+    # plotfigure = plotdata.new_plotfigure(name='Density', figno=0)
 
-    plotitem = plotaxes.new_plotitem(plot_type='2d_schlieren')
-    plotitem.plot_var = 0
-    plotitem.add_colorbar = True
+    # plotaxes = plotfigure.new_plotaxes()
+    # plotaxes.title = 'Density'
+    # plotaxes.scaled = False      # so aspect ratio is 1
+    # plotaxes.afteraxes = label_axes
+
+    # plotitem = plotaxes.new_plotitem(plot_type='2d_schlieren')
+    # plotitem.plot_var = 0
+    # plotitem.add_colorbar = True
 
 
     # # Tracer plot
@@ -112,7 +112,7 @@ def setplot(plotdata):
     plotitem.plot_var = p_vs_x
     plotitem.plotstyle = '-*'
 
-    # # slice plot
+    # slice plot
     plotfigure = plotdata.new_plotfigure(name='char vs x', figno=4)
     plotaxes = plotfigure.new_plotaxes()
     plotaxes.title = 'char vs x '
@@ -121,7 +121,6 @@ def setplot(plotdata):
     plotitem = plotaxes.new_plotitem(plot_type='1d_from_2d_data')
     plotitem.map_2d_to_1d = fchar
     plotitem.plot_var = fchar
-    plotaxes.ylimits = [-0.1,0.1]
     plotitem.plotstyle = '-*'
 
     return plotdata

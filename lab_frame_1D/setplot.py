@@ -7,8 +7,10 @@ def setplot(plotdata):
     """
     from clawpack.visclaw import colormaps
     import numpy as np
+    import matplotlib.pyplot as plt
     from znd_wave_1D import gamma, gamma1, qheat
-    
+    D = 1.4315
+
     def pressure(current_data):
         q = current_data.q
         rho = q[0,:]
@@ -24,7 +26,18 @@ def setplot(plotdata):
 
     def reacVar(current_data):
         return current_data.q[3,:] / current_data.q[0,:]
-     
+
+
+    def fchar(current_data):
+        """Computes the velocity from the conserved quantities"""
+        p = pressure(current_data)
+        out = current_data.q[1,:]/current_data.q[0,:] +np.sqrt(gamma*p/current_data.q[0,:]) - D
+        return out
+
+    def label_axes(current_data):
+
+        plt.xlabel('x')
+        plt.ylabel('y')
 
     plotdata.clearfigures()  # clear any old figures,axes,items data
 
@@ -56,17 +69,28 @@ def setplot(plotdata):
     plotitem.color = 'b'
 
     # Figure for temperature
-    plotfigure = plotdata.new_plotfigure(name='Temperature', figno=2)
+    # plotfigure = plotdata.new_plotfigure(name='Temperature', figno=2)
 
-    # Set up for axes in this figure:
-    plotaxes = plotfigure.new_plotaxes()
-    plotaxes.title = 'Temperature'
+    # # Set up for axes in this figure:
+    # plotaxes = plotfigure.new_plotaxes()
+    # plotaxes.title = 'Temperature'
 
     # Set up for item on these axes:
+    # plotitem = plotaxes.new_plotitem(plot_type='1d')
+    # plotitem.plot_var = temperature
+    # plotitem.plotstyle = 'o-'
+    # plotitem.color = 'b'
+
+    # # slice plot
+    plotfigure = plotdata.new_plotfigure(name='char vs x', figno=3)
+    plotaxes = plotfigure.new_plotaxes()
+    plotaxes.title = 'char vs x '
+    plotaxes.scaled = False      # so aspect ratio is 1
+    plotaxes.afteraxes = label_axes
     plotitem = plotaxes.new_plotitem(plot_type='1d')
-    plotitem.plot_var = temperature
-    plotitem.plotstyle = 'o-'
-    plotitem.color = 'b'
+    plotitem.plot_var = fchar
+    plotaxes.ylimits = [-0.1,0.1]
+    plotitem.plotstyle = '-*'
+
 
     return plotdata
-        
