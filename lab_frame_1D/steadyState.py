@@ -20,7 +20,7 @@ def steadyState(Q, E, gamma, xgrid):
     def omega(lam, T):
         global Ea, k
 
-        return k*np.abs((1-lam))*np.exp(Ea*(1 - 1/T))*(lam<=1)
+        return k*np.abs((1-lam))*np.exp(-Ea/T)*(lam<=1)
 
     def dxdlam(lam):
         global Ea, b, k
@@ -53,8 +53,8 @@ def steadyState(Q, E, gamma, xgrid):
     lam = sol[::-1, 0]
 
     whereAreNaNs = np.isnan(lam);
-    lam[whereAreNaNs] = 1;    
-    
+    lam[whereAreNaNs] = 1;
+
 #    lam = lam*(lam < 1) + (lam > 1)
 
     delta = b*np.sqrt(np.abs(1-lam))*(lam<=1)
@@ -63,8 +63,3 @@ def steadyState(Q, E, gamma, xgrid):
     U = -gamma*(1+D**2)*(1-delta)/((gamma+1)*D)
 
     return rho, U, p, lam, D, k
-
-
-
-
-

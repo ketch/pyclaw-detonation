@@ -8,8 +8,7 @@ def setplot(plotdata):
     from clawpack.visclaw import colormaps
     import numpy as np
     import matplotlib.pyplot as plt
-    from znd_wave_1D import gamma, gamma1, qheat
-    D = 1.4315
+    D = 1
 
     def pressure(current_data):
         q = current_data.q
@@ -81,7 +80,7 @@ def setplot(plotdata):
     # plotitem.plotstyle = 'o-'
     # plotitem.color = 'b'
 
-    # # slice plot
+p    # # slice plot
     plotfigure = plotdata.new_plotfigure(name='char vs x', figno=3)
     plotaxes = plotfigure.new_plotaxes()
     plotaxes.title = 'char vs x '

@@ -29,16 +29,16 @@ qheat = q_asympt*gamma1*gamma
 Ea = theta/(gamma1**2)
 
 qheat = 0.4
-Ea = 65
+Ea = 40
 
 if mpi.COMM_WORLD.Get_rank()==0:
     print('Heat release Q = {} and activation energy = {}'.format(qheat,Ea))
 
-T_ign = 1.0001
+T_ign = 1.01
 
 xmin=0
-xmax=50
-mx= 1000
+xmax= 40
+mx= 100
 xs = xmax-5
 tfinal = 5000
 num_output_times = 5000
@@ -67,7 +67,7 @@ def omega(state):
     press = gamma1*(q[2,:]-0.5*q[1,:]**2/q[0,:] -
                         qheat*q[3,:])
     T = press/rho
-    return -k*(q[3,:])*np.exp(Ea*(1-1/T))*(T>T_ign)
+    return -k*(q[3,:])*np.exp(Ea*(1-1/T))*(T>T_ign)*(q[3,:]>=0)
 
 
 def custom_bc(state,dim,t,qbc,num_ghost):
@@ -128,7 +128,7 @@ def qinit_znd(state,domain,xs=xs):
     p = pg[ixlower:ixupper]
     Y = Yg[ixlower:ixupper]
 
-    pert = 0.000 * np.sin(2*4*np.pi*x) * (x<xs)
+    pert = 0.001 * np.sin(2*4*np.pi*x) * (x<xs)
     state.q[0,:] = rho + pert
     state.q[1,:] = rho * u +pert
     state.q[2,:] = p/gamma1 + rho*(u**2)/2 + qheat * rho * Y  + pert
@@ -170,6 +170,7 @@ def setup(outdir='./_output',use_petsc=False, mx=mx, tfinal=tfinal,
     from clawpack import riemann
     import reactive_euler_roe_1D
     import reactive_euler_efix_roe_1D
+    import reactive_euler_exact_1D
 
     if use_petsc:
         import clawpack.petclaw as pyclaw
@@ -178,19 +179,26 @@ def setup(outdir='./_output',use_petsc=False, mx=mx, tfinal=tfinal,
 
     if solver_type=='sharpclaw':
         solver = pyclaw.SharpClawSolver1D(reactive_euler_roe_1D)
+        #solver = pyclaw.SharpClawSolver1D(reactive_euler_efix_roe_1D)
         solver.dq_src= dq_step_reaction
         solver.weno_order = 5
         #solver.lim_type = 1
         #solver.time_integrator = "SSP33"
     else:
-        solver = pyclaw.ClawSolver1D(reactive_euler_roe_1D)
-        solver.limiters = [1,1,1,1]
+        #solver = pyclaw.ClawSolver1D(reactive_euler_roe_1D)
+        #solver = pyclaw.ClawSolver1D(reactive_euler_efix_roe_1D)
+        solver = pyclaw.ClawSolver1D(reactive_euler_exact_1D)
+        solver.limiters = [1,1,1,4]
         solver.step_source = step_reaction
-        solver.order = 2
+        solver.order = 1
 
     solver.bc_lower[0]=pyclaw.BC.extrap
     solver.bc_upper[0]=pyclaw.BC.extrap
     solver.user_bc_upper = custom_bc
+
+    solver.cfl_max = 0.5
+    solver.cfl_desired = 0.45
+    solver.dt_initial=0.005
 
     solver.num_waves = 4
     solver.num_eqn = 4
@@ -207,6 +215,13 @@ def setup(outdir='./_output',use_petsc=False, mx=mx, tfinal=tfinal,
     state.problem_data['qheat']= qheat
     state.problem_data['Ea'] = Ea
     state.problem_data['T_ign'] = T_ign
+
+    # Parameters needed for exact Riemann solver only
+    state.problem_data['bet'] = (gamma+1.)/(gamma-1)
+    state.problem_data['tau'] = (gamma-1.)/(2*gamma)
+    state.problem_data['tol'] = 0.1
+
+    print('tau = {} and beta = {}'.format(state.problem_data['bet'],state.problem_data['tau']))
 
     qinit_znd(state,domain)
 
