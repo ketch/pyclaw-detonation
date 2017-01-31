@@ -1,5 +1,6 @@
 List of things to do:
 
+- Develop a code for reactive Burgers models
 - Get a working version of shock_frame_1D
 - Write data for lab_frame_2D solver in a format that a software like
 paraview can read
